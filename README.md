@@ -18,9 +18,15 @@
 
 ## Для запуска:
         1) Скопируйте репозиторий - 
-        '''git clone https://github.com/KostaMiA/A-B-Test-Calculator-Sample-Size.git'''\
+        '''
+        git clone https://github.com/KostaMiA/A-B-Test-Calculator-Sample-Size.git
+        '''\
         2) Установите зависимости - 
-        '''pip install -r requirements.txt'''\
+        '''
+        pip install -r requirements.txt
+        '''\
         3) Запустить приложение через терминал в данной директории - 
-        '''streamlit run app.py'''\
+        '''
+        streamlit run app.py
+        '''\
         4) Приложение откроется в вашем браузере, где вы сможете внести данные ваших А\В - тестов и увидеть результаты оценки и их интерпретацию.
