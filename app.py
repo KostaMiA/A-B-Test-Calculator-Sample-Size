@@ -1,98 +1,56 @@
 import streamlit as st
-import pandas as pd
-from scipy.stats import chi2_contingency, norm
-import matplotlib.pyplot as plt
-from statsmodels.stats.power import GofChisquarePower
-from statsmodels.stats.proportion import proportion_effectsize
-import requests
+from stats import calculate_conversion_test
+from plots import plot_conversion_distributions, plot_difference_distribution
+import config
 
-st.set_page_config(page_title="A/B Test Calculator", page_icon="🧠")
+st.set_page_config(page_title=config.APP_TITLE, layout="wide")
+st.title(config.APP_TITLE)
 
-st.sidebar.subheader("About the Author")
+# Боковое меню
+st.sidebar.header("Параметры эксперимента")
+alpha = st.sidebar.slider("Alpha (Уровень значимости)", 0.01, 0.10, config.DEFAULT_ALPHA, 0.01, help=config.HELP_ALPHA)
 
-image_url = "https://github.com/benjaminjvdm/streamlit-author/blob/main/Untitled%20design(1)(1).png?raw=true"
-try:
-    response = requests.get(image_url)
-    print(f"Image URL: {image_url}")
-    response.raise_for_status()
-    image = response.content
-    st.sidebar.image(image, caption="Moon Benjee (문벤지)")
-except requests.exceptions.RequestException as e:
-    st.sidebar.error(f"Error loading image: {e}")
+# Входные данные
+col_a, col_b = st.columns(2)
 
-st.sidebar.markdown(
-    """
-    This app was Built with ❤️ by **Benjee(문벤지)**.
-    You can connect with me on: [LinkedIn](https://www.linkedin.com/in/benjaminjvdm/)
-    """
-)
+with col_a:
+    st.subheader("Группа A (Control)")
+    n_a = st.number_input("Выборка A (N)", min_value=1, value=1000, key="n_a")
+    conv_a = st.number_input("Конверсии A (K)", min_value=0, max_value=n_a, value=100, key="conv_a")
 
-st.title("A/B Test Calculator")
-# Create tabs
-tab1, tab2 = st.tabs(["Main Results", "Additional Metrics"])
+with col_b:
+    st.subheader("Группа B (Treatment)")
+    n_b = st.number_input("Выборка B (N)", min_value=1, value=1000, key="n_b")
+    conv_b = st.number_input("Конверсии B (K)", min_value=0, max_value=n_b, value=130, key="conv_b")
 
-with tab1:  # Main Results Tab
-    data_type = st.radio("Select input type:", ("Raw Data", "Conversion Rates"))
+# Расчет статистики
+results = calculate_conversion_test(conv_a, n_a, conv_b, n_b, alpha)
 
-    if data_type == "Raw Data":
-        visitors_a = st.number_input("Visitors (Group A)", value=1000, step=10)
-        conversions_a = st.number_input("Conversions (Group A)", value=50, step=1)
-        visitors_b = st.number_input("Visitors (Group B)", value=1200, step=10)
-        conversions_b = st.number_input("Conversions (Group B)", value=65, step=1)
+st.divider()
 
-        if visitors_a == 0 or visitors_b == 0:
-            st.error("Error: Visitors cannot be zero.")
-        else:
-            rate_a = conversions_a / visitors_a
-            rate_b = conversions_b / visitors_b
-    else:
-        rate_a = st.number_input("Conversion Rate (Group A)", value=0.05, step=0.001, format="%.3f")
-        rate_b = st.number_input("Conversion Rate (Group B)", value=0.055, step=0.001, format="%.3f")
-        visitors_a = 1000
-        visitors_b = 1200
-        conversions_a = rate_a * visitors_a
-        conversions_b = rate_b * visitors_b
+# Основные метрики (KPI)
+m1, m2, m3, m4 = st.columns(4)
+m1.metric("CR Группы A", f"{results['cr_a']:.2%}")
+m2.metric("CR Группы B", f"{results['cr_b']:.2%}")
+m3.metric("Относительный прирост", f"{results['relative_lift']:.2f}%")
+m4.metric("P-value", f"{results['p_value']:.4f}")
 
-    # Contingency table
-    table = [[conversions_a, visitors_a - conversions_a],
-             [conversions_b, visitors_b - conversions_b]]
+# Вывод статуса
+if results['is_significant']:
+    st.success(f"Различие статистически значимо на уровне α = {alpha}!")
+else:
+    st.warning("Различие статистически НЕ значимо. Недостаточно данных для отклонения нулевой гипотезы.")
 
-    # Chi-squared test (with zero conversion handling)
-    if conversions_a == 0 or conversions_b == 0:
-        st.warning("Cannot calculate p-value or significance with zero conversions in either group. Please input data with at least one conversion in each group.")
-    else:
-        chi2, p, _, _ = chi2_contingency(table)
-        alpha = 0.05
-        st.markdown("**Results**")
-        st.write(f"Conversion Rate A: {rate_a:.1%}")
-        st.write(f"Conversion Rate B: {rate_b:.1%}")
-        st.write(f"P-value: {p:.4f}")
+st.divider()
 
-        if p < alpha:
-            st.success("There is a statistically significant difference between the groups.")
-        else:
-            st.info("There is NOT a statistically significant difference between the groups.")
+# Визуализация результатов
+st.header("Визуализация распределений")
+tab1, tab2 = st.tabs(["Сравнение групп A и B", "Распределение разницы и ДИ"])
 
-with tab2:  # Additional Metrics Tab
-    # Effect size (Lift)
-    st.markdown("**Effect Size (Lift)**")
-    lift = (rate_b - rate_a) / rate_a
-    st.write(f"Lift (Relative Improvement): {lift:.1%}")
+with tab1:
+    fig_comp = plot_conversion_distributions(conv_a, n_a, conv_b, n_b, alpha)
+    st.plotly_chart(fig_comp, use_container_width=True)
 
-    # Confidence intervals (approximation)
-    st.markdown("**Confidence Intervals (95%)**")
-    z_score = norm.ppf(1 - alpha / 2)
-    se_a = ((rate_a * (1 - rate_a)) / visitors_a) ** 0.5
-    se_b = ((rate_b * (1 - rate_b)) / visitors_b) ** 0.5
-    ci_a = [rate_a - z_score * se_a, rate_a + z_score * se_a]
-    ci_b = [rate_b - z_score * se_b, rate_b + z_score * se_b]
-
-    st.write(f"Group A: [{ci_a[0]:.1%}, {ci_a[1]:.1%}]")
-    st.write(f"Group B: [{ci_b[0]:.1%}, {ci_b[1]:.1%}]")
-
-    # Visualization
-    st.markdown("**Visualization**")
-    fig, ax = plt.subplots()
-    ax.bar(["Group A", "Group B"], [rate_a, rate_b], yerr=[se_a, se_b], capsize=10)
-    ax.set_ylabel("Conversion Rate")
-    st.pyplot(fig)
+with tab2:
+    fig_diff = plot_difference_distribution(conv_a, n_a, conv_b, n_b, alpha)
+    st.plotly_chart(fig_diff, use_container_width=True)
