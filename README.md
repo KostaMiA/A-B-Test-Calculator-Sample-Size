@@ -25,7 +25,7 @@ git clone https://github.com/KostaMiA/A-B-Test-Calculator-Sample-Size.git
 ```
 pip install -r requirements.txt
 ```
-3) Запустить приложение через терминал в данной директории - 
+3) Запустите приложение через терминал в данной директории - 
 ```
 streamlit run app.py
 ```
